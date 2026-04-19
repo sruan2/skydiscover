@@ -24,7 +24,7 @@ def _map_config(config: Config, iterations: Optional[int], evaluator_path: str, 
     """Convert SkyDiscover Config to ShinkaEvolve's three config objects."""
     from dataclasses import fields as dc_fields
 
-    from shinka.core.runner import EvolutionConfig
+    from shinka.core.config import EvolutionConfig
     from shinka.database import DatabaseConfig as ShinkaDBC
     from shinka.launch import LocalJobConfig
 
