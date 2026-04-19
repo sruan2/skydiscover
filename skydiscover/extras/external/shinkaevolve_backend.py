@@ -159,7 +159,7 @@ async def run(
     feedback_reader=None,
 ) -> DiscoveryResult:
     """Run evolution using the ShinkaEvolve package."""
-    from shinka.core import AsyncEvolutionRunner
+    from shinka.core import ShinkaEvolveRunner
 
     from skydiscover.api import DiscoveryResult
     from skydiscover.config import bridge_provider_env
@@ -203,7 +203,7 @@ if __name__ == "__main__":
         json.dump(result, f)
 """
 
-    runner = AsyncEvolutionRunner(
+    runner = ShinkaEvolveRunner(
         evo_config=evo_config,
         job_config=job_config,
         db_config=db_config,
