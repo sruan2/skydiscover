@@ -5,6 +5,7 @@ import asyncio
 import logging
 import multiprocessing
 import os
+import subprocess
 import sys
 import traceback
 from typing import Optional
@@ -91,6 +92,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Search algorithm to use",
     )
+    parser.add_argument(
+        "--max-problems",
+        type=int,
+        default=None,
+        help="Run multiple problems (0..N-1) sequentially, each as a separate subprocess "
+        "(e.g. for Frontier-CS). Sets FRONTIER_CS_PROBLEM for each run.",
+    )
 
     return parser.parse_args()
 
@@ -104,6 +112,10 @@ async def main_async() -> int:
     """Async entry point for the CLI. Returns exit code."""
     args = parse_args()
     _configure_logging(args.log_level)
+
+    # Multi-problem mode: dispatch N sequential runs with FRONTIER_CS_PROBLEM=0..N-1
+    if args.max_problems is not None:
+        return _run_multi_problem(args)
 
     if args.initial_program and not os.path.exists(args.initial_program):
         print(f"Error: Initial program file '{args.initial_program}' not found", file=sys.stderr)
@@ -279,6 +291,51 @@ async def main_async() -> int:
         print(f"Error: {exc}", file=sys.stderr)
         traceback.print_exc()
         return 1
+
+
+def _run_multi_problem(args: argparse.Namespace) -> int:
+    """Run multiple problems sequentially, one subprocess per problem ID."""
+    # Rebuild the command without --max-problems
+    base_cmd = [sys.executable, "-m", "skydiscover.cli"]
+    if args.initial_program:
+        base_cmd.append(args.initial_program)
+    base_cmd.append(args.evaluation_file)
+    if args.config:
+        base_cmd.extend(["--config", args.config])
+    if args.iterations is not None:
+        base_cmd.extend(["--iterations", str(args.iterations)])
+    if args.search:
+        base_cmd.extend(["--search", args.search])
+    if args.model:
+        base_cmd.extend(["--model", args.model])
+    if args.log_level:
+        base_cmd.extend(["--log-level", args.log_level])
+    if args.api_base:
+        base_cmd.extend(["--api-base", args.api_base])
+    if args.agentic:
+        base_cmd.append("--agentic")
+
+    env = os.environ.copy()
+    results = []
+    for p_id in range(args.max_problems):
+        env["FRONTIER_CS_PROBLEM"] = str(p_id)
+        output_dir = args.output or "outputs"
+        cmd = base_cmd + ["--output", os.path.join(output_dir, f"problem_{p_id}")]
+        print(f"\n[{p_id + 1}/{args.max_problems}] Running problem {p_id}...")
+        try:
+            subprocess.run(cmd, check=True, env=env)
+            results.append((p_id, True))
+        except subprocess.CalledProcessError:
+            results.append((p_id, False))
+
+    print("\n" + "=" * 40)
+    print("ALL RUNS COMPLETE")
+    print("=" * 40)
+    for p_id, ok in results:
+        status = "ok" if ok else "FAILED"
+        print(f"  Problem {p_id}: {status}")
+    failed = sum(1 for _, ok in results if not ok)
+    return 1 if failed else 0
 
 
 def _configure_logging(level_name: Optional[str]) -> None:
