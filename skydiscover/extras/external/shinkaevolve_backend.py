@@ -260,7 +260,7 @@ if __name__ == "__main__":
 
         poll_task = asyncio.create_task(_poll_programs())
 
-    await runner.run()
+    await runner.run_async()
 
     if poll_task:
         poll_task.cancel()
