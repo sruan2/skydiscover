@@ -17,6 +17,63 @@ logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
+# Prompt placeholder resolution
+# ------------------------------------------------------------------
+
+
+def _resolve_prompt_placeholders(prompt: str) -> str:
+    """Resolve template placeholders like {problem_statement} in the system prompt.
+
+    Currently supports Frontier-CS: fetches the problem statement from the
+    local judge server when FRONTIER_CS_PROBLEM is set.
+    """
+    needs_statement = "{problem_statement}" in prompt
+    needs_constraints = "{problem_constraints}" in prompt
+    if not needs_statement and not needs_constraints:
+        return prompt
+
+    problem_id = os.environ.get("FRONTIER_CS_PROBLEM")
+    if problem_id is None:
+        logger.warning(
+            "Prompt contains {problem_statement}/{problem_constraints} placeholders "
+            "but FRONTIER_CS_PROBLEM is not set — leaving unresolved"
+        )
+        return prompt
+
+    statement = _fetch_frontier_cs_statement(problem_id)
+    if statement is None:
+        logger.warning(
+            "Could not fetch Frontier-CS problem statement for problem %s", problem_id
+        )
+        return prompt
+
+    replacements = {
+        "problem_statement": statement,
+        "problem_constraints": statement,  # statement includes constraints
+    }
+    try:
+        return prompt.format(**replacements)
+    except KeyError as exc:
+        logger.warning("Unresolved prompt placeholder: %s", exc)
+        return prompt
+
+
+def _fetch_frontier_cs_statement(problem_id: str) -> Optional[str]:
+    """Fetch a problem statement from the Frontier-CS judge server."""
+    import requests
+
+    judge_url = os.environ.get("JUDGE_URL", "http://localhost:8081")
+    url = f"{judge_url}/problem/{problem_id}/statement"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.text
+    except Exception as exc:
+        logger.warning("Failed to fetch problem statement from %s: %s", url, exc)
+        return None
+
+
+# ------------------------------------------------------------------
 # Config mapping
 # ------------------------------------------------------------------
 
@@ -92,6 +149,7 @@ def _map_config(config: Config, iterations: Optional[int], output_dir: str):
         if sp and sp not in ("system_message", "evaluator_system_message"):
             sys_prompt = sp
     if sys_prompt:
+        sys_prompt = _resolve_prompt_placeholders(sys_prompt)
         if hasattr(oe, "prompt"):
             oe.prompt.system_message = sys_prompt
         for m in oe.llm.models:

@@ -319,8 +319,13 @@ def _run_multi_problem(args: argparse.Namespace) -> int:
     results = []
     for p_id in range(args.max_problems):
         env["FRONTIER_CS_PROBLEM"] = str(p_id)
-        output_dir = args.output or "outputs"
-        cmd = base_cmd + ["--output", os.path.join(output_dir, f"problem_{p_id}")]
+        base_output = args.output or "outputs"
+        search_prefix = args.search if args.search else "default"
+        timestamp = __import__("datetime").datetime.now().strftime("%m%d_%H%M")
+        run_dir = os.path.join(
+            base_output, search_prefix, f"frontier_cs_{args.max_problems}_{timestamp}"
+        )
+        cmd = base_cmd + ["--output", os.path.join(run_dir, f"problem_{p_id}")]
         print(f"\n[{p_id + 1}/{args.max_problems}] Running problem {p_id}...")
         try:
             subprocess.run(cmd, check=True, env=env)
