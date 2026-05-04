@@ -23,8 +23,23 @@ def get_judge_url() -> str:
     """Get a judge URL using random selection for load balancing."""
     return random.choice(JUDGE_URLS)
 
-# Add Frontier-CS to path
-frontier_cs_path = Path(__file__).resolve().parent / "Frontier-CS" / "src"
+# Add Frontier-CS to path.
+# The evaluator may be copied to an output dir by ShinkaEvolve, so the naive
+# __file__-relative path won't work. Search order:
+#   1. FRONTIER_CS_SRC env var (explicit override)
+#   2. Relative to this file (works when run from original location)
+#   3. Relative to the working directory (benchmarks/frontier-cs-eval/Frontier-CS/src)
+_candidate_paths = [
+    os.environ.get("FRONTIER_CS_SRC"),
+    str(Path(__file__).resolve().parent / "Frontier-CS" / "src"),
+    str(Path.cwd() / "benchmarks" / "frontier-cs-eval" / "Frontier-CS" / "src"),
+]
+for _p in _candidate_paths:
+    if _p and Path(_p).is_dir():
+        frontier_cs_path = Path(_p)
+        break
+else:
+    frontier_cs_path = Path(__file__).resolve().parent / "Frontier-CS" / "src"
 if str(frontier_cs_path) not in sys.path:
     sys.path.insert(0, str(frontier_cs_path))
 
