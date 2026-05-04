@@ -82,6 +82,8 @@ def _map_config(config: Config, iterations: Optional[int], evaluator_path: str, 
         if sp and sp not in ("system_message", "evaluator_system_message"):
             sys_prompt = sp
     if sys_prompt:
+        from skydiscover.extras.external.openevolve_backend import _resolve_prompt_placeholders
+        sys_prompt = _resolve_prompt_placeholders(sys_prompt)
         evo_kwargs["task_sys_msg"] = sys_prompt
 
     evo = EvolutionConfig(**evo_kwargs)
