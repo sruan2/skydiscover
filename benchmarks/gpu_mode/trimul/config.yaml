@@ -6,11 +6,11 @@ log_level: "INFO"
 
 llm:
   models:
-    - name: "gpt-5"
+    - name: "gpt-5.5"
       weight: 1.0
   api_base: https://api.openai.com/v1
+  reasoning_effort: medium
   temperature: 1.0
-  # top_p: 0.95  # omitted by default; some providers (e.g. Anthropic) reject both temperature and top_p
   max_tokens: 32000
   timeout: 600
 
@@ -202,12 +202,10 @@ prompt:
 
     Rules:
     - The tensors arguments passed in will be already on your cuda device.
-    - Define all of your code in one final ```python ``` block.
     - We will test the correctness of your kernel on multiple input shapes, make sure to support different potential test cases.
     - You are allowed to use mixed precision computations, but make sure your final output is in float32.
-    - You must use trition 3.3.1 and these kernels will be run on an H100.
+    - You must use triton 3.3.1 and these kernels will be run on an H100.
     - You do not have to implement everything in triton, you may choose to have some of the operations done in pytorch. However, you must implement at least part of the operations in a kernel.
-    - Include a short docstring at the top summarizing your algorithm.
 evaluator:
   timeout: 600
   max_retries: 3

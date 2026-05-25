@@ -6,11 +6,11 @@ log_level: "INFO"
 
 llm:
   models:
-    - name: "gpt-5"
+    - name: "gpt-5.5"
       weight: 1.0
   api_base: https://api.openai.com/v1
+  reasoning_effort: medium
   temperature: 1.0
-  # top_p: 0.95  # omitted by default; some providers (e.g. Anthropic) reject both temperature and top_p
   max_tokens: 32000
   timeout: 600
 
@@ -289,9 +289,8 @@ prompt:
     - The tensors arguments passed in will be already on your cuda device.
     - The weights for all parameters in the MLA will be given as input.
     - All weights and data will be in `torch.bfloat16` format.
-    - Define all of your code in one final ```python ``` block.
     - The entrypoint to your code must be named 'custom_kernel'.
-    - You will be using trition 3.4.0 and your kernels will be run on an Nvidia H200 GPU.
+    - You will be using triton 3.4.0 and your kernels will be run on an Nvidia H200 GPU.
     - Consider optimizing multiple operations with triton, not just limited to softmax. E.g., rope, attention, etc.
     - You are allowed to use torch.compile().
 
