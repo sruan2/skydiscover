@@ -7,7 +7,7 @@ log_level: "INFO"
 
 llm:
   models:
-    - name: "gpt-5"
+    - name: "gpt-5.5"
       weight: 1.0
   api_base: "https://api.openai.com/v1"
   api_key: ${OPENAI_API_KEY}
@@ -15,6 +15,7 @@ llm:
   # top_p: 0.95  # omitted by default; some providers (e.g. Anthropic) reject both temperature and top_p
   max_tokens: 32000
   timeout: 600
+  reasoning_effort: medium
   guide_models:
     - name: "gpt-5-mini"
       max_tokens: 8000
