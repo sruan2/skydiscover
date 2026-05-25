@@ -33,13 +33,10 @@ import time
 import math
 import contextlib
 import dataclasses
-import traceback
 import importlib.util
 
 import torch
 import torch.cuda
-
-from skydiscover.evaluation.evaluation_result import EvaluationResult
 
 # Import problem-specific reference (the problem dir is already on sys.path
 # because SkyDiscover adds the evaluator file's directory before loading it).
@@ -200,11 +197,7 @@ def _evaluate_modal(submission_code):
 
     ref_code = getattr(reference, 'MODAL_REFERENCE_CODE', None)
     if ref_code is None:
-        return EvaluationResult(
-            metrics={"combined_score": 0.0, "correctness": 0.0},
-            artifacts={"error": "MODAL_REFERENCE_CODE not defined in reference.py",
-                       "failure_stage": "modal_setup"},
-        )
+        return {"combined_score": 0.0, "correctness": 0.0}
 
     with modal_app.run():
         result = eval_fn.remote(
@@ -223,25 +216,13 @@ def _evaluate_modal(submission_code):
         )
 
     if isinstance(result, dict):
-        error = result.get("error")
         score = float(result.get("combined_score", 0.0))
         metrics = {"combined_score": score, "correctness": float(result.get("correctness", 0.0))}
         if "geom_mean_us" in result:
             metrics["geom_mean_us"] = float(result["geom_mean_us"])
-        artifacts = {}
-        if error:
-            artifacts["error"] = str(error)
-            artifacts["failure_stage"] = "modal_eval"
-        if "bench_means_us" in result:
-            for i, us in enumerate(result["bench_means_us"]):
-                artifacts[f"bench_{i}_mean_us"] = f"{us:.2f}"
-        artifacts["hardware"] = MODAL_GPU
-        return EvaluationResult(metrics=metrics, artifacts=artifacts)
+        return metrics
 
-    return EvaluationResult(
-        metrics={"combined_score": 0.0, "correctness": 0.0},
-        artifacts={"error": "Modal returned unexpected type", "failure_stage": "modal_eval"},
-    )
+    return {"combined_score": 0.0, "correctness": 0.0}
 
 
 # ---------------------------------------------------------------------------
@@ -257,14 +238,7 @@ def _evaluate_local(program_path):
         spec.loader.exec_module(mod)
         custom_kernel = mod.custom_kernel
     except Exception as exc:
-        return EvaluationResult(
-            metrics={"combined_score": 0.0, "correctness": 0.0},
-            artifacts={
-                "error": f"Failed to load submission: {exc}",
-                "traceback": traceback.format_exc(),
-                "failure_stage": "import",
-            },
-        )
+        return {"combined_score": 0.0, "correctness": 0.0}
 
     # Correctness
     for i, tc in enumerate(reference.TEST_CASES):
@@ -276,24 +250,9 @@ def _evaluate_local(program_path):
             torch.cuda.synchronize()
             passed, msg = reference.check_implementation(data_copy, output)
             if not passed:
-                return EvaluationResult(
-                    metrics={"combined_score": 0.0, "correctness": 0.0},
-                    artifacts={
-                        "error": f"Test {i} failed: {msg}",
-                        "failure_stage": "correctness",
-                        "test_index": str(i),
-                    },
-                )
+                return {"combined_score": 0.0, "correctness": 0.0}
         except Exception as exc:
-            return EvaluationResult(
-                metrics={"combined_score": 0.0, "correctness": 0.0},
-                artifacts={
-                    "error": f"Test {i} error: {exc}",
-                    "traceback": traceback.format_exc(),
-                    "failure_stage": "correctness",
-                    "test_index": str(i),
-                },
-            )
+            return {"combined_score": 0.0, "correctness": 0.0}
 
     # Warmup
     _warmup(custom_kernel, reference.BENCHMARK_CASES[0])
@@ -303,10 +262,7 @@ def _evaluate_local(program_path):
     for bench_args in reference.BENCHMARK_CASES:
         st, err = _bench_single(custom_kernel, bench_args)
         if err:
-            return EvaluationResult(
-                metrics={"combined_score": 0.0, "correctness": 1.0},
-                artifacts={"error": err, "failure_stage": "benchmark"},
-            )
+            return {"combined_score": 0.0, "correctness": 1.0}
         bench_means_ns.append(st["mean"])
 
     # Scoring: geometric mean of benchmark means → microseconds → score
@@ -315,21 +271,11 @@ def _evaluate_local(program_path):
     geom_mean_us = geom_mean_s * 1e6
     score = SCORE_SCALE / geom_mean_us
 
-    metrics = {
+    return {
         "combined_score": score,
         "correctness": 1.0,
         "geom_mean_us": geom_mean_us,
     }
-    artifacts = {
-        "hardware": "local",
-    }
-    for i, ns in enumerate(bench_means_ns):
-        artifacts[f"bench_{i}_mean_us"] = f"{ns / 1e3:.2f}"
-
-    return EvaluationResult(
-        metrics=metrics,
-        artifacts=artifacts,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -342,23 +288,13 @@ def evaluate(program_path):
         with open(program_path, "r") as f:
             code = f.read()
     except Exception as exc:
-        return EvaluationResult(
-            metrics={"combined_score": 0.0, "correctness": 0.0},
-            artifacts={"error": f"Failed to read file: {exc}", "failure_stage": "file_read"},
-        )
+        return {"combined_score": 0.0, "correctness": 0.0}
 
     if USE_MODAL:
         try:
             return _evaluate_modal(code)
         except Exception as exc:
-            return EvaluationResult(
-                metrics={"combined_score": 0.0, "correctness": 0.0},
-                artifacts={
-                    "error": f"Modal evaluation failed: {exc}",
-                    "traceback": traceback.format_exc(),
-                    "failure_stage": "modal_eval",
-                },
-            )
+            return {"combined_score": 0.0, "correctness": 0.0}
 
     return _evaluate_local(program_path)
 
@@ -368,27 +304,15 @@ def evaluate_stage1(program_path):
         with open(program_path, "r") as f:
             code = f.read()
     except Exception as exc:
-        return EvaluationResult(
-            metrics={"combined_score": 0.0, "stage1_passed": 0.0},
-            artifacts={"error": f"Failed to read file: {exc}", "failure_stage": "file_read"},
-        )
+        return {"combined_score": 0.0, "stage1_passed": 0.0}
 
     if "custom_kernel" not in code:
-        return EvaluationResult(
-            metrics={"combined_score": 0.0, "stage1_passed": 0.0},
-            artifacts={"error": "Missing custom_kernel function", "failure_stage": "validation"},
-        )
+        return {"combined_score": 0.0, "stage1_passed": 0.0}
 
     try:
         compile(code, program_path, "exec")
     except SyntaxError as exc:
-        return EvaluationResult(
-            metrics={"combined_score": 0.0, "stage1_passed": 0.0},
-            artifacts={
-                "error": f"Syntax error at line {exc.lineno}: {exc.msg}",
-                "failure_stage": "syntax_check",
-            },
-        )
+        return {"combined_score": 0.0, "stage1_passed": 0.0}
 
     # When using Modal, skip local import check (triton may not be installed locally).
     if not USE_MODAL:
@@ -397,24 +321,11 @@ def evaluate_stage1(program_path):
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             if not hasattr(mod, "custom_kernel"):
-                return EvaluationResult(
-                    metrics={"combined_score": 0.0, "stage1_passed": 0.0},
-                    artifacts={"error": "custom_kernel not found after import", "failure_stage": "import"},
-                )
+                return {"combined_score": 0.0, "stage1_passed": 0.0}
         except Exception as exc:
-            return EvaluationResult(
-                metrics={"combined_score": 0.0, "stage1_passed": 0.0},
-                artifacts={
-                    "error": f"Import failed: {exc}",
-                    "traceback": traceback.format_exc(),
-                    "failure_stage": "import",
-                },
-            )
+            return {"combined_score": 0.0, "stage1_passed": 0.0}
 
-    return EvaluationResult(
-        metrics={"combined_score": 0.5, "stage1_passed": 1.0},
-        artifacts={},
-    )
+    return {"combined_score": 0.5, "stage1_passed": 1.0}
 
 
 def evaluate_stage2(program_path):

@@ -17,27 +17,22 @@ llm:
 
 prompt:
   system_message: |
-    You are an expert Triton kernel engineer. Output ONLY Python code - no explanations.
+    You are an expert Triton kernel engineer optimizing GPU kernels for maximum performance.
 
-    REQUIRED OUTPUT STRUCTURE:
-    1. Imports: torch, triton, triton.language as tl
-    2. @triton.jit kernel function(s)
-    3. def custom_kernel(data) wrapper - REQUIRED entry point
-
-    Task: Optimize float16 vector addition kernel. C = A + B
+    Task: Optimize a float16 vector addition kernel. C = A + B
     Input: Tuple of (A, B) tensors of shape (N, N) and dtype torch.float16
     Output: Tensor of shape (N, N) and dtype torch.float16
     N can be: 256, 512, 1024, 2048, 4096, 8192
 
-    Optimization tips:
+    The program must define a custom_kernel(data) function as its entry point.
+    Use @triton.jit for kernel functions.
+
+    Optimization strategies to consider:
     - Block size tuning (512, 1024, 2048, 4096)
-    - Use @triton.autotune for automatic parameter tuning
+    - @triton.autotune for automatic parameter tuning
     - Vectorized loads for memory operations
     - Grid configuration for occupancy
     - Memory coalescing for sequential access patterns
-
-    MUST use @triton.jit decorator. MUST return float16 tensor.
-    Output complete, working code in a single ```python``` block.
 
 evaluator:
   timeout: 600
