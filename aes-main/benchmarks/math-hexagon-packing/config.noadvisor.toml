@@ -1,0 +1,34 @@
+[run]
+name = "math-hexagon-packing-gpt55-noadvisor"
+# No-advisor ablation: the worker is the only agent. It receives the full
+# experiment history directly (the role the advisor would otherwise digest) and
+# self-directs each iteration. Compare against math-hexagon-packing-gpt55.
+iterations = 20
+runs_dir = "../../runs"
+improvement_tolerance = 0.0
+use_advisor = false
+
+# [advisor] is still required by the loader but is NOT invoked when
+# use_advisor = false; it is kept here only to satisfy config validation.
+[advisor]
+command = ["codex", "exec", "--model", "gpt-5.5", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "-c", "model_reasoning_effort=medium", "-"]
+prompt_file = "prompts/advisor.md"
+timeout_seconds = 600
+
+[worker]
+command = ["codex", "exec", "--model", "gpt-5.5", "--skip-git-repo-check", "--ephemeral", "--sandbox", "workspace-write", "-c", "model_reasoning_effort=medium", "-"]
+prompt_file = "prompts/worker.md"
+timeout_seconds = 600
+
+[application]
+kind = "math-hexagon-packing"
+workspace = "workspace"
+editable_files = ["submission.py"]
+evaluation_command = ["uv", "run", "--extra", "math-hexagon-packing", "python", "-I", "evaluate.py", "submission.py"]
+metric_pattern = 'combined_score:\s*([0-9.]+)'
+metric_group = 1
+direction = "maximize"
+evaluation_timeout_seconds = 660
+
+[application.environment]
+PYTHONDONTWRITEBYTECODE = "1"

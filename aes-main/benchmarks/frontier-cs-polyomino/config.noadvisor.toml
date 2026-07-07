@@ -1,0 +1,35 @@
+[run]
+name = "frontier-cs-polyomino-gpt55-noadvisor"
+# No-advisor ablation of frontier-cs-polyomino-gpt55: the worker is the only
+# agent and receives the full experiment history directly.
+iterations = 20
+runs_dir = "../../runs"
+improvement_tolerance = 0.0
+use_advisor = false
+
+# [advisor] is required by the loader but NOT invoked when use_advisor = false.
+[advisor]
+command = ["codex", "exec", "--model", "gpt-5.5", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "-c", "model_reasoning_effort=medium", "-"]
+prompt_file = "prompts/advisor.md"
+timeout_seconds = 600
+
+[worker]
+command = ["codex", "exec", "--model", "gpt-5.5", "--skip-git-repo-check", "--ephemeral", "--sandbox", "workspace-write", "-c", "model_reasoning_effort=medium", "-"]
+prompt_file = "prompts/worker.md"
+timeout_seconds = 600
+
+[application]
+kind = "frontier-cs-polyomino"
+workspace = "workspace"
+editable_files = ["submission.cpp"]
+evaluation_command = ["uv", "run", "--project", "/Users/sherryruan/github/skydiscover", "--extra", "frontier-cs", "python", "aes_evaluate.py", "submission.cpp"]
+metric_pattern = 'combined_score:\s*([0-9.]+)'
+metric_group = 1
+direction = "maximize"
+evaluation_timeout_seconds = 900
+
+[application.environment]
+FRONTIER_CS_PROBLEM = "0"
+JUDGE_URLS = "http://localhost:8081"
+FRONTIER_CS_SRC = "/Users/sherryruan/github/skydiscover/benchmarks/frontier-cs-eval/Frontier-CS/src"
+PYTHONDONTWRITEBYTECODE = "1"

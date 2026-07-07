@@ -1,0 +1,32 @@
+[run]
+name = "math-circle-packing-gpt55-noadvisor"
+# No-advisor ablation of math-circle-packing-gpt55: the worker is the only agent
+# and receives the full experiment history directly.
+iterations = 20
+runs_dir = "../../runs"
+improvement_tolerance = 0.0
+use_advisor = false
+
+# [advisor] is required by the loader but NOT invoked when use_advisor = false.
+[advisor]
+command = ["codex", "exec", "--model", "gpt-5.5", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "-c", "model_reasoning_effort=medium", "-"]
+prompt_file = "prompts/advisor.md"
+timeout_seconds = 600
+
+[worker]
+command = ["codex", "exec", "--model", "gpt-5.5", "--skip-git-repo-check", "--ephemeral", "--sandbox", "workspace-write", "-c", "model_reasoning_effort=medium", "-"]
+prompt_file = "prompts/worker.md"
+timeout_seconds = 600
+
+[application]
+kind = "math-circle-packing"
+workspace = "workspace"
+editable_files = ["submission.py"]
+evaluation_command = ["uv", "run", "--extra", "math-circle-packing", "python", "-I", "evaluate.py", "submission.py"]
+metric_pattern = 'combined_score:\s*([0-9.]+)'
+metric_group = 1
+direction = "maximize"
+evaluation_timeout_seconds = 420
+
+[application.environment]
+PYTHONDONTWRITEBYTECODE = "1"

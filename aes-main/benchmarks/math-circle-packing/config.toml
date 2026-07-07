@@ -1,0 +1,33 @@
+[run]
+name = "math-circle-packing-call-normalized"
+# AES makes two top-level agent invocations per iteration (advisor + worker).
+# Fifty iterations match SkyDiscover's 100 configured generation invocations.
+iterations = 20
+runs_dir = "../../runs"
+improvement_tolerance = 0.0
+
+[advisor]
+command = ["claude", "--print", "--model", "claude-sonnet-4-6", "--safe-mode", "--no-session-persistence", "--permission-mode", "plan", "--tools", "Read,Glob,Grep"]
+prompt_file = "prompts/advisor.md"
+timeout_seconds = 600
+
+[worker]
+command = ["claude", "--print", "--model", "claude-sonnet-4-6", "--safe-mode", "--no-session-persistence", "--permission-mode", "acceptEdits", "--tools", "Read,Glob,Grep,Edit,Write"]
+prompt_file = "prompts/worker.md"
+timeout_seconds = 600
+
+[application]
+kind = "math-circle-packing"
+workspace = "workspace"
+editable_files = ["submission.py"]
+evaluation_command = ["uv", "run", "--extra", "math-circle-packing", "python", "-I", "evaluate.py", "submission.py"]
+metric_pattern = 'combined_score:\s*([0-9.]+)'
+metric_group = 1
+direction = "maximize"
+# Upstream's harness-level evaluator timeout is 360 seconds. Allow a small
+# wrapper-cleanup margin while evaluate.py enforces the candidate limit.
+evaluation_timeout_seconds = 365
+protect_workspace = true
+
+[application.environment]
+PYTHONDONTWRITEBYTECODE = "1"

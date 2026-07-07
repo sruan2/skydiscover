@@ -1,0 +1,43 @@
+"""Isolated protocol runner for a circle-packing candidate."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+import traceback
+from pathlib import Path
+from typing import Any
+
+RESULT_PREFIX = "CIRCLE_PACKING_RESULT="
+
+
+def json_value(value: Any) -> Any:
+    return value.tolist() if hasattr(value, "tolist") else value
+
+
+def main() -> int:
+    path = Path(sys.argv[1]).resolve()
+    try:
+        spec = importlib.util.spec_from_file_location("circle_packing_submission", path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"cannot import candidate: {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        centers, radii, reported_sum = module.run_packing()
+        payload = {
+            "centers": json_value(centers),
+            "radii": json_value(radii),
+            "reported_sum": json_value(reported_sum),
+        }
+    except BaseException as exc:
+        payload = {
+            "error": f"{type(exc).__name__}: {exc}",
+            "traceback": traceback.format_exc(),
+        }
+    print(f"{RESULT_PREFIX}{json.dumps(payload, allow_nan=True)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
