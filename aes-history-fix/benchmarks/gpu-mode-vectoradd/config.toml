@@ -1,0 +1,25 @@
+[run]
+name = "gpu-mode-vectoradd"
+iterations = 5
+runs_dir = "../../runs"
+improvement_tolerance = 0.05
+
+[advisor]
+model = "claude-sonnet-4-6"
+prompt_file = "prompts/advisor.md"
+timeout_seconds = 300
+
+[worker]
+model = "claude-sonnet-4-6"
+prompt_file = "prompts/worker.md"
+timeout_seconds = 600
+
+[application]
+kind = "gpu-mode-vectoradd"
+workspace = "workspace"
+editable_files = ["submission.py"]
+evaluation_command = ["uv", "run", "--extra", "gpu-mode-vectoradd", "python", "evaluate.py", "submission.py", "--output", "results.json"]
+metric_pattern = 'metric_us:\s*([0-9.]+)'
+metric_group = 1
+direction = "minimize"
+evaluation_timeout_seconds = 420

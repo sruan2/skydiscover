@@ -1,0 +1,30 @@
+[run]
+name = "nanogpt"
+iterations = 10
+runs_dir = "../../runs"
+improvement_tolerance = 0.0005
+
+[advisor]
+model = "claude-opus-4-8"
+prompt_file = "prompts/advisor.md"
+timeout_seconds = 300
+
+[worker]
+model = "claude-opus-4-8"
+prompt_file = "prompts/worker.md"
+timeout_seconds = 900
+
+[application]
+kind = "nanogpt"
+# Replace this with a Karpathy autoresearch/nanoGPT checkout, or pass
+# --workspace /absolute/path/to/checkout on the command line.
+workspace = "workspace"
+editable_files = ["train.py"]
+evaluation_command = ["uv", "run", "train.py"]
+metric_pattern = '^val_bpb:\s*([0-9.]+)'
+metric_group = 1
+direction = "minimize"
+evaluation_timeout_seconds = 1200
+
+[application.environment]
+OMP_NUM_THREADS = "1"

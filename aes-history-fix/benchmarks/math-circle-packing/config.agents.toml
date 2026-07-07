@@ -1,0 +1,28 @@
+[run]
+name = "math-circle-packing-agents"
+iterations = 20
+runs_dir = "../../runs"
+improvement_tolerance = 0.0
+
+[advisor]
+command = ["claude", "--print", "--model", "claude-sonnet-4-6", "--safe-mode", "--no-session-persistence", "--permission-mode", "plan", "--tools", "Read,Glob,Grep"]
+prompt_file = "prompts/advisor-subprocess.md"
+timeout_seconds = 600
+
+[worker]
+command = ["claude", "--print", "--model", "claude-sonnet-4-6", "--safe-mode", "--no-session-persistence", "--permission-mode", "acceptEdits", "--tools", "Read,Glob,Grep,Edit,Write"]
+prompt_file = "prompts/worker-subprocess.md"
+timeout_seconds = 600
+
+[application]
+kind = "math-circle-packing"
+workspace = "workspace"
+editable_files = ["submission.py"]
+evaluation_command = ["uv", "run", "--extra", "math-circle-packing", "python", "-I", "evaluate.py", "submission.py"]
+metric_pattern = 'sum_radii:\s*([0-9.]+)'
+metric_group = 1
+direction = "maximize"
+evaluation_timeout_seconds = 365
+
+[application.environment]
+PYTHONDONTWRITEBYTECODE = "1"

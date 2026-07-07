@@ -1,0 +1,28 @@
+[run]
+name = "anthropic-performance-takehome"
+iterations = 20
+runs_dir = "../../runs"
+improvement_tolerance = 0.0
+
+[advisor]
+model = "claude-sonnet-4-6"
+prompt_file = "prompts/advisor.md"
+timeout_seconds = 900
+
+[worker]
+model = "claude-sonnet-4-6"
+prompt_file = "prompts/worker.md"
+timeout_seconds = 900
+
+[application]
+kind = "anthropic-performance-takehome"
+workspace = "workspace"
+editable_files = ["perf_takehome.py"]
+evaluation_command = ["uv", "run", "python", "evaluate.py"]
+metric_pattern = 'metric_cycles:\s*([0-9.]+)'
+metric_group = 1
+direction = "minimize"
+evaluation_timeout_seconds = 120
+
+[application.environment]
+PYTHONDONTWRITEBYTECODE = "1"
