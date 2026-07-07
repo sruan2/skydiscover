@@ -1,0 +1,36 @@
+[run]
+name = "polyomino-hf-lm-k1"
+iterations = 20
+runs_dir = "../../runs"
+improvement_tolerance = 0.0
+workers = 1
+
+[advisor]
+model = "gpt-5.5"
+prompt_file = "prompts/advisor.md"
+max_tokens = 32000
+reasoning_effort = "medium"
+timeout_seconds = 600
+
+[worker]
+model = "gpt-5.5"
+prompt_file = "prompts/worker.md"
+max_tokens = 32000
+reasoning_effort = "medium"
+timeout_seconds = 600
+
+[application]
+kind = "frontier-cs-polyomino"
+workspace = "workspace_k1"
+editable_files = ["submission.cpp"]
+evaluation_command = ["uv", "run", "--project", "/Users/sherryruan/github/skydiscover", "--extra", "frontier-cs", "python", "aes_evaluate.py", "submission.cpp"]
+metric_pattern = 'combined_score:\s*([0-9.]+)'
+metric_group = 1
+direction = "maximize"
+evaluation_timeout_seconds = 900
+
+[application.environment]
+FRONTIER_CS_PROBLEM = "0"
+JUDGE_URLS = "http://localhost:8081"
+FRONTIER_CS_SRC = "/Users/sherryruan/github/skydiscover/benchmarks/frontier-cs-eval/Frontier-CS/src"
+PYTHONDONTWRITEBYTECODE = "1"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import copy
 import difflib
 import json
@@ -14,7 +15,7 @@ import sys
 import threading
 import time
 import tomllib
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,7 @@ class Config:
     app: AppConfig
     path: Path
     use_advisor: bool = True
+    workers: int = 1
 
 
 @dataclass(frozen=True)
@@ -210,6 +212,7 @@ def load_config(path: str | Path, workspace_override: str | Path | None = None) 
         app=app_config,
         path=config_path,
         use_advisor=bool(run.get("use_advisor", True)),
+        workers=max(1, int(run.get("workers", 1))),
     )
 
 
@@ -1425,6 +1428,91 @@ def create_run_dir(config: Config) -> Path:
     return run_dir
 
 
+def _run_worker_pool_round(
+    config: Config,
+    worker_client: Any,
+    run_dir: Path,
+    number: int,
+    best: float,
+    proposal: str,
+    experiments: list[Experiment],
+) -> tuple[AgentResult, Evaluation]:
+    """Run ``config.workers`` workers concurrently, each in an isolated copy of
+    the current workspace, evaluate all candidates, copy the best valid one into
+    the main workspace, and return (winning worker result, its evaluation).
+
+    All slot metrics are logged to a ``worker_pool`` event.
+    """
+    pool_root = config.app.workspace.parent / f".pool_iter_{number:04d}"
+    shutil.rmtree(pool_root, ignore_errors=True)
+    pool_root.mkdir(parents=True, exist_ok=True)
+
+    def run_slot(slot: int) -> dict[str, Any]:
+        iso = pool_root / f"slot_{slot}"
+        shutil.copytree(
+            config.app.workspace,
+            iso,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+        iso_cfg = replace(config, app=replace(config.app, workspace=iso))
+        before = snapshot(iso_cfg)
+        # each parallel worker gets its own fresh conversation history
+        worker = run_worker(
+            worker_client, iso_cfg, [], number, best, proposal, experiments
+        )
+        if not worker.success:
+            evaluation = Evaluation(
+                False, None,
+                stderr=f"worker failed: {worker.stderr}",
+                returncode=worker.returncode,
+            )
+        elif not changed_files(iso_cfg, before):
+            evaluation = Evaluation(False, None, stderr="worker made no change")
+        else:
+            evaluation = evaluate(iso_cfg)
+        print(
+            f"  [pool slot {slot}] metric={evaluation.metric} "
+            f"success={evaluation.success}",
+            flush=True,
+        )
+        return {"slot": slot, "worker": worker, "evaluation": evaluation, "iso": iso}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=config.workers) as ex:
+        results = list(ex.map(run_slot, range(config.workers)))
+
+    valid = [
+        r for r in results
+        if r["evaluation"].success and r["evaluation"].metric is not None
+    ]
+    if valid:
+        pick = max if config.app.direction == "maximize" else min
+        winner = pick(valid, key=lambda r: r["evaluation"].metric)
+    else:
+        winner = results[0]
+
+    # copy the winning candidate's editable files into the main workspace
+    for rel in config.app.editable_files:
+        src = winner["iso"] / rel
+        if src.exists():
+            dst = config.app.workspace / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+
+    append_event(
+        run_dir,
+        "worker_pool",
+        {
+            "experiment": number,
+            "workers": config.workers,
+            "winner_slot": winner["slot"],
+            "metrics": [r["evaluation"].metric for r in results],
+            "successes": [r["evaluation"].success for r in results],
+        },
+    )
+    shutil.rmtree(pool_root, ignore_errors=True)
+    return winner["worker"], winner["evaluation"]
+
+
 def evolve(config: Config) -> Path:
     validate_config(config)
     run_dir = create_run_dir(config)
@@ -1541,45 +1629,54 @@ def evolve(config: Config) -> Path:
             )
         else:
             before = snapshot(config)
-            worker = run_worker(
-                worker_client,
-                config,
-                worker_history,
-                number,
-                best,
-                proposal,
-                experiments,
-            )
+            if config.workers > 1:
+                print(
+                    f"[worker pool] running {config.workers} workers in parallel",
+                    flush=True,
+                )
+                worker, evaluation = _run_worker_pool_round(
+                    config, worker_client, run_dir, number, best, proposal, experiments
+                )
+            else:
+                worker = run_worker(
+                    worker_client,
+                    config,
+                    worker_history,
+                    number,
+                    best,
+                    proposal,
+                    experiments,
+                )
+                if not worker.success:
+                    evaluation = Evaluation(
+                        False,
+                        None,
+                        stderr=f"worker failed: {worker.stderr}",
+                        returncode=worker.returncode,
+                    )
+                else:
+                    _changed = changed_files(config, before)
+                    target = ", ".join(_changed) if _changed else "unchanged candidate"
+                    print(f"[evaluator] testing {target}", flush=True)
+                    evaluation = evaluate(config)
+
             write_agent_output(run_dir, number, "worker", worker)
             changed = changed_files(config, before)
             patch_file = write_patch(run_dir, number, make_patch(config, before))
             candidate_files = write_candidate_files(run_dir, number, config)
 
-            if not worker.success:
+            keep = (
+                evaluation.success
+                and evaluation.metric is not None
+                and is_better(config, evaluation.metric, best)
+            )
+            status = "keep" if keep else ("discard" if evaluation.success else "error")
+            if keep:
+                best = evaluation.metric  # type: ignore[assignment]
+                best_snapshot = snapshot(config)
+                write_best_files(run_dir, config)
+            elif not evaluation.success:
                 restore(config, best_snapshot)
-                evaluation = Evaluation(
-                    False,
-                    None,
-                    stderr=f"worker failed: {worker.stderr}",
-                    returncode=worker.returncode,
-                )
-                status = "error"
-            else:
-                target = ", ".join(changed) if changed else "unchanged candidate"
-                print(f"[evaluator] testing {target}", flush=True)
-                evaluation = evaluate(config)
-                keep = (
-                    evaluation.success
-                    and evaluation.metric is not None
-                    and is_better(config, evaluation.metric, best)
-                )
-                status = "keep" if keep else ("discard" if evaluation.success else "error")
-                if keep:
-                    best = evaluation.metric  # type: ignore[assignment]
-                    best_snapshot = snapshot(config)
-                    write_best_files(run_dir, config)
-                elif not evaluation.success:
-                    restore(config, best_snapshot)
 
             evaluation_file = write_evaluation(run_dir, number, evaluation)
             experiment = Experiment(
